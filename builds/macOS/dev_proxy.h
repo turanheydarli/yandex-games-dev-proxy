@@ -76,7 +76,6 @@ extern "C" {
 
 extern char* GetLogs();
 extern void StartServer(char* goHost, char* goPath, char* goAppID, GoUint8 goCsp, GoInt goPort, char* goTld, GoUint8 goLogReq);
-extern void StopServer();
 
 #ifdef __cplusplus
 }

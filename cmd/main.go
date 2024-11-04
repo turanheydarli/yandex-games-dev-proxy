@@ -14,44 +14,9 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
+	cert "github.com/playables-studio/yandex-games-dev-proxy"
 )
-
-import (
-	"crypto/rand"
-	"crypto/rsa"
-	"crypto/x509"
-	"crypto/x509/pkix"
-	"encoding/pem"
-	"math/big"
-)
-
-func generateSelfSignedCert() (tls.Certificate, error) {
-	priv, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		return tls.Certificate{}, err
-	}
-
-	template := x509.Certificate{
-		SerialNumber: big.NewInt(0),
-		Subject: pkix.Name{
-			Organization: []string{"Your SDK Name"},
-		},
-		NotBefore: time.Now(),
-		NotAfter:  time.Now().Add(365 * 24 * time.Hour),
-		IsCA:      true,
-		KeyUsage:  x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
-	}
-
-	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, &priv.PublicKey, priv)
-	if err != nil {
-		return tls.Certificate{}, err
-	}
-
-	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(priv)})
-	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
-
-	return tls.X509KeyPair(certPEM, keyPEM)
-}
+import "context"
 
 var (
 	server    *http.Server
@@ -65,58 +30,6 @@ var (
 	cspData   = ""
 	logBuffer strings.Builder
 	logMutex  sync.Mutex
-)
-
-const (
-	certPEM = `-----BEGIN CERTIFICATE-----
-MIIDOzCCAiOgAwIBAgIUEhdlNwxCdAB4A5sc+huKCeSksvYwDQYJKoZIhvcNAQEL
-BQAwRTELMAkGA1UEBhMCQVUxEzARBgNVBAgMClNvbWUtU3RhdGUxITAfBgNVBAoM
-GEludGVybmV0IFdpZGdpdHMgUHR5IEx0ZDAgFw0yNDA0MDIxNjMzMzJaGA8yMTI0
-MDMwOTE2MzMzMlowRTELMAkGA1UEBhMCQVUxEzARBgNVBAgMClNvbWUtU3RhdGUx
-ITAfBgNVBAoMGEludGVybmV0IFdpZGdpdHMgUHR5IEx0ZDCCASIwDQYJKoZIhvcN
-AQEBBQADggEPADCCAQoCggEBAKg8TOLFjeDe/Wy5oXJjaQpAGxCKnLT+io8/EUgF
-KlRkamD2dJVZ+1OT8cDI6oju82ZY3DfGQMwg+Cgh/PLMlPXOyfsBFGiwBmAYwIM8
-Ixa1ZCgDzPqkFhuvpAjTUoOMkehEEIpvCdrJ78ahD7cOlh+iOe/c8TpuOs+T68rF
-3KAqjnicghfjnVyTg99ySZFIFvwbOlfPgbe2yXAqfnwAxy6wwDgP+3Jk7yYuR9Ip
-YaXFzVyXnRxaRBFdsYuv0CgacpBbghNdYn6sZmj4phyVubwXkq64oyLHe/lMegZl
-qzOumm9qfRQ9G0vGi8xzelKxfPj+Vag/uR4MstlglsRk68sCAwEAAaMhMB8wHQYD
-VR0OBBYEFHtFH3JDmoGMV09qBHorWWkp9sckMA0GCSqGSIb3DQEBCwUAA4IBAQAg
-vjNymnac6QuYv7lRbCWyzOfwskyMSuYvZp7Otc0xw28wLLcY55/iT2kfxo3zkCCF
-piv0kzd7kmN3ctJ0gT4+J+H68jEjOjDQuPu6lzvLnZLessIMdHX7A0kJxDicJawr
-sj43w3VKvcvackgK1L+2DD0YNPVzlNCeRVy2QukwtH5mI5OeVcQiV6/2oZLVnKFG
-nISCKinpJX7LgBsnAT/eB6d3S3wGc9iWflOWGWB7aqNhoZNxWzsuGgVC/G3Tbayo
-c0Yerzk2MCZjMAcbb8TMXGU9vfqjrxn65/X4On+14UIOk97uBGBNfc0JZL945T/S
-DI71niYu4L3UMuTsam8F
------END CERTIFICATE-----`
-
-	keyPEM = `-----BEGIN PRIVATE KEY-----
-MIIEvwIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAgEAAoIBAQCoPEzixY3g3v1s
-uaFyY2kKQBsQipy0/oqPPxFIBSpUZGpg9nSVWftTk/HAyOqI7vNmWNw3xkDMIPgo
-IfzyzJT1zsn7ARRosAZgGMCDPCMWtWQoA8z6pBYbr6QI01KDjJHoRBCKbwnaye/G
-oQ+3DpYfojnv3PE6bjrPk+vKxdygKo54nIIX451ck4PfckmRSBb8GzpXz4G3tslw
-Kn58AMcusMA4D/tyZO8mLkfSKWGlxc1cl50cWkQRXbGLr9AoGnKQW4ITXWJ+rGZo
-+KYclbm8F5KuuKMix3v5THoGZaszrppvan0UPRtLxovMc3pSsXz4/lWoP7keDLLZ
-YJbEZOvLAgMBAAECggEAGyq5o7kRIyn/NIp5ZrZk5PHbLP2lNpkQGPevO7kRz9Tz
-VLsXsnJ4YlO2q1IGhZxIk9NvpFYQaqY8TIbIiRC+UT9WYIEZIZqjPOtiUw7n/6fF
-B60tcaADre7cB0zQu0t82Ev9e81Ygwsu/B1QI1hop60TvAcqsSvRtWmGnxT6fqZ9
-H4MJDzSEyoUyUdPaIvdXPYMO66wGqvfTVagZ0zl0cJf/yH+fwGKinq7CDpDWFo6T
-7pjbfVjCiQORblBul6zNwMc7tp2KgBk+YpHk3rKcV426tKYAddurhL/AGKV4uSU7
-ZqnaBYWjPqd8qli6QMVNqOwDrYHtDIO7Tb0k0HZd2QKBgQDp8amKJsRMqHoXqzUB
-HW2EJh/ARrVVsOEAYFKXVa2JTJ0Rojw2ITXu+zSLW0ieI6QRvZmesLB3fxzD8wpo
-TCMSot45jyqeDIBr/HlJpEJ+F3wRB01j5M67NHRUH8FRu4C1Iq7iYx6YTHlER8YQ
-VO68OZ8jkzSAQMUrKmviXBOpvQKBgQC4GLyf4qrE6Pp2s6qxrqv0eB5x2Uw8jGYe
-RUrK42KooZnBruDBLjIlK6TJwsm4IS/4BMNz21ddA4HqSP4cmjWB/ziGLgEN/dNJ
-dMmvhfTeK3zaDu8UF0oFe1lyKV4kVXfUnIElMXpqBsJA0l2GZvLOuUivRpHfeP57
-PQ9Mz/dQJwKBgQDkLr2yLZvcNZxYx7p8auquMc1Yat9mRI9CIbGNQJlySRMO5xIZ
-rg0AG2+l2ZScAqF+WFOlcCu/cnFpQv7Mui6fd9KPi/AClqkQKwNWa+wbNubhaSD4
-JW3rNP+eKhcSlHO2uaygzhNCc5z4l5U9ysnNN9rcBTH5QrPOJaNy92KKdQKBgQCw
-eQ3/2kHG5mqJ9SqwjvdJLwhILHw3IoMVi2jp2lUNv3Nrxd6vcEAjf5XEztOdjTq1
-bqOJ4P37LMyRsIzfEDgwuF4PyfO63NF4fdqERk331wok4eHuiXCslpSkqeETxVZM
-WgY2iBqHnpkBmGaM2wzwe46gbm6RISQZMOwEvuqdSwKBgQCcAvA7QsSBN7CpIx+j
-EEGcIbZ8DFfsZ91pwyxXfOYkpD1eBpwY3PFeGVkvdSB4w+1RmNDB9GV6xRQsFV5j
-Kyt6MeZNerWnPu4Che55N+xtiGPNq/pR5KfcpYkbjpSCoJ3etkMZWZ/zx+l4AyaO
-GTxuQXvdfeOlaDFjsDK6UtLBzg==
------END PRIVATE KEY-----`
 )
 
 func init() {
@@ -159,21 +72,30 @@ func StartServer(goHost, goPath, goAppID *C.char, goCsp bool, goPort int, goTld 
 	}
 
 	if csp {
-		go fetchCSP()
+		go fetchCSPWithRetry()
 	}
 
-	cert, err := generateSelfSignedCert()
+	certificate, err := cert.NewCertificateManager().GetOrCreateCertificate()
 	if err != nil {
-		log.Printf("Failed to generate self-signed certificate: %v", err)
+		log.Printf("Failed to get or create certificate: %v", err)
 		return
 	}
 
+	tlsConfig := &tls.Config{
+		Certificates:       []tls.Certificate{certificate},
+		MinVersion:         tls.VersionTLS12,
+		MaxVersion:         tls.VersionTLS13,
+		ClientAuth:         tls.NoClientCert,
+		InsecureSkipVerify: true,
+	}
+
 	server = &http.Server{
-		Addr:    fmt.Sprintf(":%d", port),
-		Handler: mux,
-		TLSConfig: &tls.Config{
-			Certificates: []tls.Certificate{cert},
-		},
+		Addr:              fmt.Sprintf(":%d", port),
+		Handler:           mux,
+		TLSConfig:         tlsConfig,
+		ReadHeaderTimeout: 10 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	log.Printf("Server is running on https://localhost:%d/\n", port)
@@ -191,16 +113,120 @@ func StartServer(goHost, goPath, goAppID *C.char, goCsp bool, goPort int, goTld 
 //export StopServer
 func StopServer() {
 	if server != nil {
-		err := server.Close()
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		err := server.Shutdown(ctx)
 		if err != nil {
-			log.Printf("Error stopping server: %v", err)
+			log.Printf("Error shutting down server: %v", err)
 		} else {
-			log.Println("Server stopped successfully.")
+			log.Printf("Server stopped successfully")
 		}
+	} else {
+		log.Printf("Server is not running")
 	}
 }
 
+func fetchCSPWithRetry() {
+	maxRetries := 3
+	retryDelay := time.Second * 2
+
+	for i := 0; i < maxRetries; i++ {
+		if err := fetchCSP(); err != nil {
+			log.Printf("CSP fetch attempt %d failed: %v", i+1, err)
+			if i < maxRetries-1 {
+				time.Sleep(retryDelay)
+				retryDelay *= 2 // Exponential backoff
+				continue
+			}
+		}
+		break
+	}
+}
+
+func fetchCSP() error {
+	client := &http.Client{
+		Timeout: time.Second * 10,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			},
+		},
+	}
+
+	appUrl := fmt.Sprintf("https://yandex.%s/games/app/%s?draft=true", tld, appID)
+	resp, err := client.Get(appUrl)
+	if err != nil {
+		return fmt.Errorf("error fetching CSP: %v", err)
+	}
+	defer resp.Body.Close()
+
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	if err != nil {
+		return fmt.Errorf("error parsing HTML: %v", err)
+	}
+
+	gameFrameSrc, exists := doc.Find("#game-frame").Attr("src")
+	if !exists {
+		return fmt.Errorf("game frame not found")
+	}
+
+	gameResp, err := client.Get(gameFrameSrc)
+	if err != nil {
+		return fmt.Errorf("error fetching game HTML: %v", err)
+	}
+	defer gameResp.Body.Close()
+
+	gameDoc, err := goquery.NewDocumentFromReader(gameResp.Body)
+	if err != nil {
+		return fmt.Errorf("error parsing game HTML: %v", err)
+	}
+
+	metaContent, exists := gameDoc.Find("meta[http-equiv=Content-Security-Policy]").Attr("content")
+	if exists {
+		// Modify CSP to work with Unity
+		cspData = modifyCSPForUnity(metaContent)
+	}
+
+	return nil
+}
+
+func modifyCSPForUnity(originalCSP string) string {
+	// Split the CSP into directives
+	directives := strings.Split(originalCSP, ";")
+	modifiedDirectives := make([]string, 0, len(directives))
+
+	for _, directive := range directives {
+		directive = strings.TrimSpace(directive)
+		if directive == "" {
+			continue
+		}
+
+		// Modify specific directives that might affect Unity
+		if strings.HasPrefix(directive, "default-src") {
+			directive = "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:"
+		} else if strings.HasPrefix(directive, "script-src") {
+			directive = "script-src * 'unsafe-inline' 'unsafe-eval'"
+		} else if strings.HasPrefix(directive, "connect-src") {
+			directive = "connect-src * ws: wss:"
+		}
+
+		modifiedDirectives = append(modifiedDirectives, directive)
+	}
+
+	return strings.Join(modifiedDirectives, "; ")
+}
+
 func handler(w http.ResponseWriter, r *http.Request) {
+	// Add CORS headers for Unity
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "*")
+
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
 	if path != "" {
 		serveStaticFiles(w, r)
 	} else if host != "" {
@@ -252,45 +278,6 @@ func loggingMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log.Printf("%s %s %s", r.Method, time.Now().Format(time.RFC3339), r.URL.Path)
 		next(w, r)
-	}
-}
-
-func fetchCSP() {
-	appUrl := fmt.Sprintf("https://yandex.%s/games/app/%s?draft=true", tld, appID)
-	resp, err := http.Get(appUrl)
-	if err != nil {
-		log.Printf("Error fetching CSP: %v", err)
-		return
-	}
-	defer resp.Body.Close()
-
-	doc, err := goquery.NewDocumentFromReader(resp.Body)
-	if err != nil {
-		log.Printf("Error parsing HTML: %v", err)
-		return
-	}
-
-	gameFrameSrc, exists := doc.Find("#game-frame").Attr("src")
-	if !exists {
-		return
-	}
-
-	gameResp, err := http.Get(gameFrameSrc)
-	if err != nil {
-		log.Printf("Error fetching game HTML: %v", err)
-		return
-	}
-	defer gameResp.Body.Close()
-
-	gameDoc, err := goquery.NewDocumentFromReader(gameResp.Body)
-	if err != nil {
-		log.Printf("Error parsing game HTML: %v", err)
-		return
-	}
-
-	metaContent, exists := gameDoc.Find("meta[http-equiv=Content-Security-Policy]").Attr("content")
-	if exists {
-		cspData = metaContent
 	}
 }
 
