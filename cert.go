@@ -31,7 +31,11 @@ type CertificateManager struct {
 
 func NewCertificateManager() *CertificateManager {
 	// Save certificates in a more permanent directory, such as the user's home directory.
-	certDir := filepath.Join(os.Getenv("HOME"), ".yandex_sdk")
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		homeDir = "." // Fallback to current directory
+	}
+	certDir := filepath.Join(homeDir, ".yandex_sdk")
 	os.MkdirAll(certDir, 0755) // Ensure the directory exists.
 
 	return &CertificateManager{
@@ -57,9 +61,11 @@ func (cm *CertificateManager) GetOrCreateCertificate() (tls.Certificate, error) 
 		return tls.Certificate{}, fmt.Errorf("failed to save certificate: %v", err)
 	}
 
-	// Add the certificate to the system's trust store
-	if err := cm.addCertToTrustStore(); err != nil {
+	// Attempt to add the certificate to the system's trust store
+	err = cm.addCertToTrustStore()
+	if err != nil {
 		log.Printf("Warning: Failed to add certificate to the system's trust store: %v", err)
+		log.Printf("You may need to manually trust the certificate located at %s", cm.certPath)
 	} else {
 		log.Printf("Certificate successfully added to the system's trust store.")
 	}
@@ -171,7 +177,8 @@ func (cm *CertificateManager) saveCertificateAndKey(certPEM, keyPEM []byte) erro
 	return nil
 }
 
-// addCertToTrustStore adds the generated certificate to the system's trust store on macOS and Windows
+// addCertToTrustStore attempts to add the generated certificate to the system's trust store.
+// If administrative privileges are required and not available, it logs a warning.
 func (cm *CertificateManager) addCertToTrustStore() error {
 	switch runtime.GOOS {
 	case "darwin":
@@ -184,12 +191,19 @@ func (cm *CertificateManager) addCertToTrustStore() error {
 }
 
 func addCertToMacOSTrustStore(certPath string) error {
-	//security add-trusted-cert -p basic -p ssl -k <<login-keychain>> <<certificate>>
-	///Users/turanheydarli/Library/Keychains/login.keychain-db
-	cmd := exec.Command("security", "add-trusted-cert", "-p", "basic", "-p", "ssl", "-k", "/Users/turanheydarli/Library/Keychains/login.keychain-db", certPath)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	// Use the 'security' command to add the certificate to the login keychain
+	// Dynamically get the user's login keychain path
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("failed to get user home directory: %v", err)
+	}
+	keychainPath := filepath.Join(homeDir, "Library", "Keychains", "login.keychain-db")
+
+	cmd := exec.Command("security", "add-trusted-cert", "-p", "ssl", "-k", keychainPath, certPath)
+	cmd.Stdin = nil
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to add certificate to macOS trust store: %v", err)
 	}
@@ -197,10 +211,12 @@ func addCertToMacOSTrustStore(certPath string) error {
 }
 
 func addCertToWindowsTrustStore(certPath string) error {
-	cmd := exec.Command("certutil", "-addstore", "Root", certPath)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	// Use 'certutil' to add the certificate to the Root store
+	cmd := exec.Command("certutil", "-addstore", "-user", "Root", certPath)
+	cmd.Stdin = nil
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to add certificate to Windows trust store: %v", err)
 	}
